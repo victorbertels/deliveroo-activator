@@ -1,3 +1,4 @@
+import os
 import unittest
 
 from deliverect import (
@@ -8,7 +9,9 @@ from deliverect import (
     combined_listing_rows,
     link_display_from_documents,
     listing_update_rows,
+    notify_zapier,
     operation_report_rows,
+    zapier_webhook_url,
     report_error_message,
 )
 
@@ -264,6 +267,32 @@ class ListingUpdateTests(unittest.TestCase):
         )
         self.assertEqual(rows[0]["Status"], "Failed")
         self.assertEqual(rows[0]["Error"], "Deliveroo catalog ID not configured for channel link abc")
+
+
+class ZapierTests(unittest.TestCase):
+    def test_missing_webhook_url_raises(self):
+        old = os.environ.pop("ZAPIER_WEBHOOK_URL", None)
+        try:
+            self.assertEqual(zapier_webhook_url(), "")
+            with self.assertRaises(RuntimeError):
+                notify_zapier([], "batch")
+        finally:
+            if old is not None:
+                os.environ["ZAPIER_WEBHOOK_URL"] = old
+
+    def test_strips_quotes_around_the_url(self):
+        old = os.environ.get("ZAPIER_WEBHOOK_URL")
+        os.environ["ZAPIER_WEBHOOK_URL"] = '"https://hooks.zapier.com/hooks/catch/example/"'
+        try:
+            self.assertEqual(
+                zapier_webhook_url(),
+                "https://hooks.zapier.com/hooks/catch/example/",
+            )
+        finally:
+            if old is None:
+                os.environ.pop("ZAPIER_WEBHOOK_URL", None)
+            else:
+                os.environ["ZAPIER_WEBHOOK_URL"] = old
 
 
 class ConnectionTests(unittest.TestCase):

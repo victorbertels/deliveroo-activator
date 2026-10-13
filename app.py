@@ -25,6 +25,7 @@ from deliverect import (
     fetch_listing_updates,
     link_display_from_documents,
     get_configured_account_id,
+    notify_zapier,
     operation_report_rows,
     publish_inventory,
     recent_listing_window,
@@ -57,6 +58,7 @@ _STREAMLIT_SECRET_KEYS = (
     "CLIENT_SECRET",
     "APP_PASSWORD",
     "DELIVEROO_BRAND_ID",
+    "ZAPIER_WEBHOOK_URL",
 )
 
 
@@ -433,6 +435,18 @@ def _publish_chosen(account_id: str, link_ids: list[str]) -> None:
     ]
     st.session_state["sync_results"] = results
     if processed_ids:
+        stores = [
+            {
+                "location": (by_link.get(link_id) or {}).get("location_name") or "",
+                "admin_id": (by_link.get(link_id) or {}).get("store_id") or "",
+                "channel_link_id": link_id,
+            }
+            for link_id in processed_ids
+        ]
+        try:
+            notify_zapier(stores, st.session_state.get("chosen_group") or "")
+        except Exception:
+            pass
         st.session_state["tracked_sync"] = {
             "account_id": account_id,
             "started_at": started_at,

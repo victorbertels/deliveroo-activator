@@ -42,6 +42,12 @@ def get_configured_account_id() -> str:
     return (os.getenv("ACCOUNT_ID") or "").strip()
 
 
+def zapier_webhook_url() -> str:
+    """Zapier Catch Hook URL from ZAPIER_WEBHOOK_URL. Empty when it is not set."""
+    value = (os.getenv("ZAPIER_WEBHOOK_URL") or "").strip().strip('"').strip("'")
+    return value
+
+
 def _ids(value) -> list[str]:
     if not value:
         return []
@@ -505,6 +511,24 @@ def publish_inventory(account: str, channel_link_ids: list[str], batch_size: int
         if not response.ok:
             break
     return results
+
+
+def notify_zapier(stores: list[dict], rollout_batch: str) -> None:
+    """Tell Zapier a listing update was published. Raises when the hook is missing or fails."""
+    url = zapier_webhook_url()
+    if not url:
+        raise RuntimeError("ZAPIER_WEBHOOK_URL is not configured.")
+    response = requests.post(
+        url,
+        json={
+            "event": "listing_update",
+            "rollout_batch": rollout_batch,
+            "stores": stores,
+        },
+        timeout=30,
+    )
+    if not response.ok:
+        raise RuntimeError(f"Zapier webhook failed (HTTP {response.status_code}).")
 
 
 def sync_started_at() -> str:
