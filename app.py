@@ -76,14 +76,11 @@ APP_PASSWORD = os.getenv("APP_PASSWORD", "")
 
 DISPLAY_COLUMNS = [
     "Sync",
-    "Rollout batch",
     "Location",
-    "Location status",
     "Channel link",
     "Link ID",
     "Store ID",
     "Brand ID",
-    "Catalog push",
 ]
 
 
@@ -117,14 +114,11 @@ def _rows_frame(rows: list[dict]) -> pd.DataFrame:
     return pd.DataFrame(
         {
             "Sync": True,
-            "Rollout batch": frame["group_name"],
             "Location": frame["location_name"],
-            "Location status": frame["location_status"],
             "Channel link": frame["link_name"],
             "Link ID": frame["link_id"],
             "Store ID": frame["store_id"] if "store_id" in frame.columns else "—",
             "Brand ID": frame["brand_id"],
-            "Catalog push": frame["catalog_push"],
         }
     )
 
@@ -335,10 +329,7 @@ def _chosen_link_details(link_ids: list[str]) -> list[dict]:
                 "name": row.get("link_name") or link_id,
                 "store_id": row.get("store_id") or "—",
                 "location_name": row.get("location_name") or "—",
-                "location_status": row.get("location_status") or "—",
-                "group_name": row.get("group_name") or "—",
                 "brand_id": row.get("brand_id") or "—",
-                "catalog_push": row.get("catalog_push") or "—",
             }
         )
     return details
@@ -371,9 +362,6 @@ def _show_health_table(results: list[dict]) -> None:
 def _step_health() -> None:
     st.subheader("Health check")
     chosen = st.session_state.get("chosen_links") or []
-    group = st.session_state.get("chosen_group") or ""
-    if group:
-        st.caption(f"Rollout batch: {group}")
     if not chosen:
         st.info("No channel links selected.")
         if _wizard_nav(back_to=2, key="health_empty_nav") == "back":
@@ -437,9 +425,6 @@ def _publish_chosen(account_id: str, link_ids: list[str]) -> None:
 def _step_publish(account_id: str) -> None:
     st.subheader("Listing update")
     chosen = st.session_state.get("chosen_links") or []
-    group = st.session_state.get("chosen_group") or ""
-    if group:
-        st.caption(f"Rollout batch: {group}")
     if not chosen:
         st.info("No channel links selected.")
         if _wizard_nav(back_to=3, key="publish_empty_nav") == "back":
@@ -463,7 +448,7 @@ def _step_publish(account_id: str) -> None:
 
     st.warning(
         f"Publish inventory for {len(chosen)} Deliveroo Retail channel link"
-        f"{'s' if len(chosen) != 1 else ''}? This calls listing update with bypass safety rules on."
+        f"{'s' if len(chosen) != 1 else ''}?"
     )
     action = _wizard_nav(back_to=3, forward_label="Publish", key="publish_nav")
     if action == "back":
@@ -630,7 +615,7 @@ def main() -> None:
             st.session_state.pop("authenticated", None)
             st.rerun()
 
-    st.title("Deliveroo Retail inventory")
+    st.title("Deliveroo Boots activator")
     step = int(st.session_state.get("wizard_step") or 1)
     _step_header(step)
 

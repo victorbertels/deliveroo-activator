@@ -449,14 +449,11 @@ def check_connections(links: list[dict], workers: int = 8) -> list[dict]:
         health = check_channel_link_health(link["id"])
         status, detail = connection_status(health)
         return {
-            "Rollout batch": link.get("group_name") or "—",
             "Location": link.get("location_name") or "—",
-            "Location status": link.get("location_status") or "—",
             "Channel link": link.get("name") or link["id"],
             "Channel link ID": link["id"],
             "Store ID": link.get("store_id") or "—",
             "Brand ID": link.get("brand_id") or "—",
-            "Catalog push": link.get("catalog_push") or "—",
             "Connection": status,
             "Credentials response": credentials_response(health),
             "Detail": detail,
