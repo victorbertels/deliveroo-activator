@@ -36,7 +36,19 @@ load_dotenv()
 st.set_page_config(
     page_title="Deliveroo Activator",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed",
+)
+st.markdown(
+    """
+    <style>
+    [data-testid="stSidebar"],
+    [data-testid="stSidebarCollapsedControl"],
+    [data-testid="stExpandSidebarButton"] {
+        display: none;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
 )
 
 _STREAMLIT_SECRET_KEYS = (
@@ -223,7 +235,6 @@ def _selected_link_ids(edited: pd.DataFrame) -> list[str]:
 
 def _step_load(account_id: str) -> None:
     st.subheader("Load account")
-    st.caption(f"Account `{account_id}`")
     if st.button("Load account", type="primary"):
         try:
             _load_account(account_id)
@@ -341,11 +352,28 @@ def _connection_cell_style(value: str) -> str:
     return ""
 
 
+HEALTH_COLUMNS = [
+    "Location",
+    "Channel link ID",
+    "Store ID",
+    "Brand ID",
+    "Connection",
+    "Credentials response",
+    "Detail",
+]
+
+
 def _show_health_table(results: list[dict]) -> None:
     ok = sum(1 for row in results if row.get("Connection") == "OK")
     st.write(f"{ok} of {len(results)} connections OK.")
     table = pd.DataFrame(results)
-    if not table.empty:
+    if table.empty:
+        table = pd.DataFrame(columns=HEALTH_COLUMNS)
+    else:
+        for column in HEALTH_COLUMNS:
+            if column not in table.columns:
+                table[column] = ""
+        table = table[HEALTH_COLUMNS]
         table = table.style.map(_connection_cell_style, subset=["Connection"])
     st.dataframe(
         table,
@@ -605,13 +633,6 @@ def main() -> None:
     _require_password()
 
     account_id = get_configured_account_id()
-    with st.sidebar:
-        st.header("Deliveroo Activator")
-        if account_id:
-            st.caption(f"Account `{account_id}`")
-        if st.button("Sign out"):
-            st.session_state.pop("authenticated", None)
-            st.rerun()
 
     st.title("Deliveroo Boots activator")
     step = int(st.session_state.get("wizard_step") or 1)
