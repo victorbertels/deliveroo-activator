@@ -182,7 +182,6 @@ class ListingUpdateTests(unittest.TestCase):
         by_id = {row["Channel link ID"]: row for row in rows}
         self.assertEqual(by_id["link-1"]["Status"], "Success")
         self.assertEqual(by_id["link-1"]["Report ID"], "newer")
-        self.assertEqual(by_id["link-1"]["Channel link"], "Deliveroo - Retail")
         self.assertEqual(by_id["other-link"]["Status"], "Waiting")
         self.assertEqual(by_id["other-link"]["Error"], "")
 

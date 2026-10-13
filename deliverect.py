@@ -450,7 +450,6 @@ def check_connections(links: list[dict], workers: int = 8) -> list[dict]:
         status, detail = connection_status(health)
         return {
             "Location": link.get("location_name") or "—",
-            "Channel link": link.get("name") or link["id"],
             "Channel link ID": link["id"],
             "Store ID": link.get("store_id") or "—",
             "Brand ID": link.get("brand_id") or "—",
@@ -632,7 +631,6 @@ def listing_update_rows(
             rows.append(
                 {
                     "Location": link.get("location_name") or info.get("location_name") or "—",
-                    "Channel link": link.get("name") or link["id"],
                     "Admin ID": link.get("admin_id") or info.get("admin_id") or "—",
                     "Channel link ID": link["id"],
                     "Status": "Waiting",
@@ -642,13 +640,7 @@ def listing_update_rows(
                 }
             )
             continue
-        rows.append(
-            _operation_report_row(
-                report,
-                fallback_name=link.get("name") or link["id"],
-                context=context,
-            )
-        )
+        rows.append(_operation_report_row(report, context=context))
     return rows
 
 
@@ -676,14 +668,12 @@ def _listing_place(link_id: str, context: dict[str, dict] | None) -> tuple[str, 
 
 def _operation_report_row(
     report: dict,
-    fallback_name: str = "",
     context: dict[str, dict] | None = None,
 ) -> dict:
-    link_id, link_name = channel_link_from_report(report)
+    link_id, _link_name = channel_link_from_report(report)
     location_name, admin_id = _listing_place(link_id, context)
     return {
         "Location": location_name,
-        "Channel link": link_name or report.get("_link_name") or fallback_name or link_id,
         "Admin ID": admin_id,
         "Channel link ID": link_id,
         "Status": operation_status_label(report.get("operationStatus")),

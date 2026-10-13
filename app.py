@@ -77,7 +77,6 @@ APP_PASSWORD = os.getenv("APP_PASSWORD", "")
 DISPLAY_COLUMNS = [
     "Sync",
     "Location",
-    "Channel link",
     "Link ID",
     "Store ID",
     "Brand ID",
@@ -115,7 +114,6 @@ def _rows_frame(rows: list[dict]) -> pd.DataFrame:
         {
             "Sync": True,
             "Location": frame["location_name"],
-            "Channel link": frame["link_name"],
             "Link ID": frame["link_id"],
             "Store ID": frame["store_id"] if "store_id" in frame.columns else "—",
             "Brand ID": frame["brand_id"],
