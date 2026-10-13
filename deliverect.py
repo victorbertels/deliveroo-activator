@@ -513,22 +513,57 @@ def publish_inventory(account: str, channel_link_ids: list[str], batch_size: int
     return results
 
 
-def notify_zapier(stores: list[dict], rollout_batch: str) -> None:
-    """Tell Zapier a listing update was published. Raises when the hook is missing or fails."""
+def email_from_token(token: str) -> str:
+    """User email from a Deliverect JWT, matching RetailTools."""
+    token = (token or "").strip()
+    if token.lower().startswith("bearer "):
+        token = token[7:].strip()
+    parts = token.split(".")
+    if len(parts) < 2:
+        return ""
+    try:
+        import base64
+
+        segment = parts[1]
+        padding = "=" * ((4 - len(segment) % 4) % 4)
+        claims = json.loads(base64.urlsafe_b64decode(segment + padding).decode("utf-8"))
+    except Exception:
+        return ""
+    if not isinstance(claims, dict):
+        return ""
+    email = str(claims.get("email") or "").strip()
+    if email:
+        return email
+    sub = str(claims.get("sub") or "").strip()
+    candidate = sub.rsplit("|", 1)[-1].strip()
+    return candidate if "@" in candidate else ""
+
+
+def zapier_notification(page_name: str, email: str, timestamp: str) -> dict:
+    """Same body RetailTools posts: page, timestamp, email."""
+    return {"page": page_name, "timestamp": timestamp, "email": email}
+
+
+def notify_zapier(page_name: str) -> None:
+    """Notify Zapier that this tool was used. No-op when the URL is unset."""
     url = zapier_webhook_url()
     if not url:
-        raise RuntimeError("ZAPIER_WEBHOOK_URL is not configured.")
-    response = requests.post(
+        return
+    try:
+        from auth import getToken
+
+        email = email_from_token(getToken())
+    except Exception:
+        email = ""
+    requests.post(
         url,
-        json={
-            "event": "listing_update",
-            "rollout_batch": rollout_batch,
-            "stores": stores,
-        },
-        timeout=30,
+        json=zapier_notification(
+            page_name,
+            email,
+            datetime.now(timezone.utc).isoformat(),
+        ),
+        timeout=5,
     )
-    if not response.ok:
-        raise RuntimeError(f"Zapier webhook failed (HTTP {response.status_code}).")
 
 
 def sync_started_at() -> str:

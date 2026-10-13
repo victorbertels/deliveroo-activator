@@ -8,9 +8,11 @@ from deliverect import (
     credentials_response,
     combined_listing_rows,
     link_display_from_documents,
+    email_from_token,
     listing_update_rows,
     notify_zapier,
     operation_report_rows,
+    zapier_notification,
     zapier_webhook_url,
     report_error_message,
 )
@@ -270,15 +272,37 @@ class ListingUpdateTests(unittest.TestCase):
 
 
 class ZapierTests(unittest.TestCase):
-    def test_missing_webhook_url_raises(self):
+    def test_missing_webhook_url_is_a_no_op(self):
         old = os.environ.pop("ZAPIER_WEBHOOK_URL", None)
         try:
             self.assertEqual(zapier_webhook_url(), "")
-            with self.assertRaises(RuntimeError):
-                notify_zapier([], "batch")
+            notify_zapier("Deliveroo Boots activator")
         finally:
             if old is not None:
                 os.environ["ZAPIER_WEBHOOK_URL"] = old
+
+    def test_payload_matches_retail_tools(self):
+        self.assertEqual(
+            zapier_notification(
+                "Deliveroo Boots activator",
+                "person@example.com",
+                "2026-10-13T19:00:00+00:00",
+            ),
+            {
+                "page": "Deliveroo Boots activator",
+                "timestamp": "2026-10-13T19:00:00+00:00",
+                "email": "person@example.com",
+            },
+        )
+
+    def test_email_comes_from_the_token(self):
+        import base64
+
+        payload = base64.urlsafe_b64encode(
+            b'{"sub":"samlp|onelogin-internal|person@example.com"}'
+        ).decode().rstrip("=")
+        token = f"header.{payload}.sig"
+        self.assertEqual(email_from_token(token), "person@example.com")
 
     def test_strips_quotes_around_the_url(self):
         old = os.environ.get("ZAPIER_WEBHOOK_URL")

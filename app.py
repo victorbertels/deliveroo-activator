@@ -420,6 +420,10 @@ def _step_health() -> None:
 
 
 def _publish_chosen(account_id: str, link_ids: list[str]) -> None:
+    try:
+        notify_zapier("Deliveroo Boots activator")
+    except Exception:
+        pass
     started_at = sync_started_at()
     by_link = {
         row["link_id"]: row
@@ -435,18 +439,6 @@ def _publish_chosen(account_id: str, link_ids: list[str]) -> None:
     ]
     st.session_state["sync_results"] = results
     if processed_ids:
-        stores = [
-            {
-                "location": (by_link.get(link_id) or {}).get("location_name") or "",
-                "admin_id": (by_link.get(link_id) or {}).get("store_id") or "",
-                "channel_link_id": link_id,
-            }
-            for link_id in processed_ids
-        ]
-        try:
-            notify_zapier(stores, st.session_state.get("chosen_group") or "")
-        except Exception:
-            pass
         st.session_state["tracked_sync"] = {
             "account_id": account_id,
             "started_at": started_at,
