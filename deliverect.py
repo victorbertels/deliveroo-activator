@@ -11,6 +11,7 @@ API_BASE = "https://api.deliverect.io"
 OPERATION_REPORTS_URL = "https://api.deliverect.com/operationReports"
 DELIVEROO_RETAIL_CHANNEL = 6002
 LISTING_UPDATE_OPERATION_TYPE = 1101
+CATALOG_PUBLISH_OPERATION_TYPE = 1100
 PAGE_SIZE = 500
 SYNC_BATCH_SIZE = 25
 RUNNING_OPERATION_STATUSES = {20, 24, 25, 26, 27, 28, 29}
@@ -40,6 +41,10 @@ def expected_brand_id() -> str:
 
 def get_configured_account_id() -> str:
     return (os.getenv("ACCOUNT_ID") or "").strip()
+
+
+def get_configured_catalog_id() -> str:
+    return (os.getenv("CATALOG_ID") or "").strip()
 
 
 def zapier_webhook_url() -> str:
@@ -513,6 +518,28 @@ def publish_inventory(account: str, channel_link_ids: list[str], batch_size: int
     return results
 
 
+def push_catalog(account: str, catalog_id: str) -> dict:
+    """Publish one catalog to Deliveroo Retail (channel 6002)."""
+    from auth import getHeaders
+
+    catalog_id = (catalog_id or "").strip()
+    if not catalog_id:
+        raise RuntimeError("CATALOG_ID is not configured.")
+    response = requests.post(
+        f"{API_BASE}/catalog/accounts/{account}/catalog/{catalog_id}/publish",
+        headers={**getHeaders(), "Content-Type": "application/json"},
+        json={"channelIds": [DELIVEROO_RETAIL_CHANNEL], "channelLinkIds": [], "brands": []},
+        timeout=120,
+    )
+    if not response.ok:
+        raise RuntimeError(f"Catalog publish failed: {_response_detail(response)}")
+    try:
+        body = response.json()
+    except ValueError:
+        body = {}
+    return body if isinstance(body, dict) else {}
+
+
 def email_from_token(token: str) -> str:
     """User email from a Deliverect JWT, matching RetailTools."""
     token = (token or "").strip()
@@ -690,6 +717,7 @@ def listing_update_rows(
             rows.append(
                 {
                     "Location": link.get("location_name") or info.get("location_name") or "—",
+                    "Operation": "Listing update",
                     "Admin ID": link.get("admin_id") or info.get("admin_id") or "—",
                     "Channel link ID": link["id"],
                     "Status": "Waiting",
@@ -731,8 +759,14 @@ def _operation_report_row(
 ) -> dict:
     link_id, _link_name = channel_link_from_report(report)
     location_name, admin_id = _listing_place(link_id, context)
+    operation = (
+        "Catalog push"
+        if report.get("operationType") == CATALOG_PUBLISH_OPERATION_TYPE
+        else "Listing update"
+    )
     return {
         "Location": location_name,
+        "Operation": operation,
         "Admin ID": admin_id,
         "Channel link ID": link_id,
         "Status": operation_status_label(report.get("operationStatus")),
@@ -747,12 +781,13 @@ def fetch_listing_updates(
     created_after: str,
     channel_link_ids: list[str] | None = None,
     channel: int | None = None,
+    operation_type: int = LISTING_UPDATE_OPERATION_TYPE,
 ) -> list[dict]:
-    """Type 1101 operation reports since ``created_after``.
+    """Operation reports since ``created_after``.
 
+    Defaults to listing updates (1101). Pass 1100 for catalog publishes.
     Pass channel link ids to keep only those links. Pass ``channel`` to keep
-    one channel, such as Deliveroo Retail (6002). Omit both to return every
-    listing update in the window.
+    one channel, such as Deliveroo Retail (6002).
     """
     from auth import getHeaders
 
@@ -765,7 +800,7 @@ def fetch_listing_updates(
     # Nested properties.channelLink._id is not filtered by the operationReports API,
     # so match the channel link after fetching type 1101 reports from this sync onward.
     where = {
-        "operationType": LISTING_UPDATE_OPERATION_TYPE,
+        "operationType": operation_type,
         "account": {"$in": [account]},
         "_created": {"$gt": created_after},
     }

@@ -267,7 +267,23 @@ class ListingUpdateTests(unittest.TestCase):
                 }
             ]
         )
+        self.assertEqual(rows[0]["Operation"], "Listing update")
         self.assertEqual(rows[0]["Status"], "Failed")
+        catalog = operation_report_rows(
+            [
+                {
+                    "_id": "catalog-1",
+                    "operationType": 1100,
+                    "operationStatus": 90,
+                    "_created": "2026-10-14T15:14:31.409000Z",
+                    "properties": {
+                        "catalogPublish": True,
+                        "channelLink": {"_id": "link-1", "name": "Deliveroo - Retail"},
+                    },
+                }
+            ]
+        )
+        self.assertEqual(catalog[0]["Operation"], "Catalog push")
         self.assertEqual(rows[0]["Error"], "Deliveroo catalog ID not configured for channel link abc")
 
 

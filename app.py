@@ -14,6 +14,7 @@ import streamlit as st
 from dotenv import load_dotenv
 
 from deliverect import (
+    CATALOG_PUBLISH_OPERATION_TYPE,
     DELIVEROO_RETAIL_CHANNEL,
     LISTING_POLL_HOURS,
     RECENT_LISTING_HOURS,
@@ -25,7 +26,9 @@ from deliverect import (
     fetch_listing_updates,
     link_display_from_documents,
     get_configured_account_id,
+    get_configured_catalog_id,
     notify_zapier,
+    push_catalog,
     operation_report_rows,
     publish_inventory,
     recent_listing_window,
@@ -59,6 +62,7 @@ _STREAMLIT_SECRET_KEYS = (
     "APP_PASSWORD",
     "DELIVEROO_BRAND_ID",
     "ZAPIER_WEBHOOK_URL",
+    "CATALOG_ID",
 )
 
 
@@ -237,7 +241,8 @@ def _selected_link_ids(edited: pd.DataFrame) -> list[str]:
 
 def _step_load(account_id: str) -> None:
     st.subheader("Load account")
-    if st.button("Load account", type="primary"):
+    load_col, push_col = st.columns(2)
+    if load_col.button("Load account", type="primary"):
         try:
             _load_account(account_id)
         except Exception as exc:
@@ -245,10 +250,19 @@ def _step_load(account_id: str) -> None:
             return
         st.session_state["wizard_step"] = 2
         st.rerun()
+    if push_col.button("Push catalog"):
+        catalog_id = get_configured_catalog_id()
+        try:
+            push_catalog(account_id, catalog_id)
+        except Exception as exc:
+            st.error(str(exc))
+        else:
+            st.session_state["report_lookup"] = {"account_id": account_id}
+            st.rerun()
 
     st.subheader("Find operation reports")
     st.caption(
-        f"Deliveroo Retail (channel {DELIVEROO_RETAIL_CHANNEL}) listing updates "
+        f"Deliveroo Retail (channel {DELIVEROO_RETAIL_CHANNEL}) listing updates and catalog pushes "
         f"from the last {RECENT_LISTING_HOURS} hours. "
         "You can look these up without publishing again."
     )
@@ -577,11 +591,21 @@ def _operation_report_table(source: str) -> None:
     st.subheader("Listing updates")
     try:
         if lookup:
-            reports = fetch_listing_updates(
+            listing = fetch_listing_updates(
                 tracked["account_id"],
                 recent_listing_window(),
                 channel=DELIVEROO_RETAIL_CHANNEL,
             )
+            catalogs = fetch_listing_updates(
+                tracked["account_id"],
+                recent_listing_window(),
+                channel=DELIVEROO_RETAIL_CHANNEL,
+                operation_type=CATALOG_PUBLISH_OPERATION_TYPE,
+            )
+            by_id = {report.get("_id"): report for report in listing}
+            for report in catalogs:
+                by_id[report.get("_id")] = report
+            reports = list(by_id.values())
             context = _listing_context(tracked["account_id"], reports)
             rows = operation_report_rows(reports, context)
         else:
@@ -610,7 +634,7 @@ def _operation_report_table(source: str) -> None:
     note, refresh = st.columns([4, 1])
     if lookup:
         note.caption(
-            f"Deliveroo Retail (channel {DELIVEROO_RETAIL_CHANNEL}) listing updates "
+            f"Deliveroo Retail (channel {DELIVEROO_RETAIL_CHANNEL}) listing updates and catalog pushes "
             f"from the last {RECENT_LISTING_HOURS} hours. Checking every 10 seconds."
         )
     elif waiting or running:
