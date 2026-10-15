@@ -32,6 +32,7 @@ CHANNEL_LINK_STATUS_LABELS = {
     3: "Subscribed",
     4: "Onboarding",
 }
+SUBSCRIBED_CHANNEL_LINK_STATUS = 3
 
 
 def expected_brand_id() -> str:
@@ -449,6 +450,57 @@ def check_channel_link_health(channel_link_id: str) -> dict:
         data["error"] = f"HTTP {response.status_code}"
         data["requestError"] = True
     return data
+
+
+def set_channel_link_status(channel_link_id: str, status: int = SUBSCRIBED_CHANNEL_LINK_STATUS) -> None:
+    """PATCH a channel link to ``{"status": N}``. Retries once when the etag changes."""
+    from auth import getHeaders
+
+    url = f"{API_BASE}/channelLinks/{channel_link_id}"
+    headers = getHeaders()
+    last_error = "Channel link has no _etag."
+    for _attempt in range(2):
+        loaded = requests.get(url, headers=headers, timeout=30)
+        if not loaded.ok:
+            raise RuntimeError(f"GET channel link {channel_link_id}: {_response_detail(loaded)}")
+        etag = (loaded.json() or {}).get("_etag")
+        if not etag:
+            raise RuntimeError(last_error)
+        patched = requests.patch(
+            url,
+            headers={**headers, "If-Match": etag, "Content-Type": "application/json"},
+            json={"status": int(status)},
+            timeout=30,
+        )
+        if patched.ok:
+            return
+        last_error = f"PATCH channel link {channel_link_id}: {_response_detail(patched)}"
+        if patched.status_code != 412:
+            raise RuntimeError(last_error)
+    raise RuntimeError(last_error)
+
+
+def subscribe_channel_links(link_ids: list[str], workers: int = 8) -> list[str]:
+    """Set each channel link to status 3. Returns error lines for the ones that failed."""
+    ids = list(dict.fromkeys(link_id for link_id in link_ids if link_id))
+    if not ids:
+        return []
+
+    def one(link_id: str) -> str | None:
+        try:
+            set_channel_link_status(link_id, SUBSCRIBED_CHANNEL_LINK_STATUS)
+        except Exception as exc:
+            return f"{link_id}: {exc}"
+        return None
+
+    errors = []
+    with ThreadPoolExecutor(max_workers=min(workers, len(ids))) as pool:
+        futures = [pool.submit(one, link_id) for link_id in ids]
+        for future in as_completed(futures):
+            error = future.result()
+            if error:
+                errors.append(error)
+    return errors
 
 
 def check_connections(links: list[dict], workers: int = 8) -> list[dict]:

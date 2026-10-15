@@ -20,6 +20,7 @@ from deliverect import (
     RECENT_LISTING_HOURS,
     channel_link_from_report,
     check_connections,
+    subscribe_channel_links,
     combined_listing_rows,
     fetch_account,
     fetch_documents_by_ids,
@@ -414,9 +415,16 @@ def _step_health() -> None:
     selection_key = tuple(chosen)
     if st.session_state.get("health_key") != selection_key:
         links = _chosen_link_details(chosen)
-        with st.spinner(f"Checking connection for {len(links)} channel links…"):
+        with st.spinner(f"Setting {len(links)} channel links to status 3, then checking the connection…"):
+            st.session_state["subscribe_errors"] = subscribe_channel_links(
+                [link["id"] for link in links]
+            )
             st.session_state["health_results"] = check_connections(links)
         st.session_state["health_key"] = selection_key
+
+    subscribe_errors = st.session_state.get("subscribe_errors") or []
+    if subscribe_errors:
+        st.error("Could not set every channel link to status 3.\n\n" + "\n".join(subscribe_errors))
 
     _show_health_table(st.session_state.get("health_results") or [])
     if st.button("Check again"):
@@ -609,9 +617,10 @@ def _operation_report_table(source: str) -> None:
             context = _listing_context(tracked["account_id"], reports)
             rows = operation_report_rows(reports, context)
         else:
+            window = recent_listing_window(LISTING_POLL_HOURS)
             recent = fetch_listing_updates(
                 tracked["account_id"],
-                recent_listing_window(LISTING_POLL_HOURS),
+                window,
                 channel=DELIVEROO_RETAIL_CHANNEL,
             )
             published = fetch_listing_updates(
@@ -619,12 +628,26 @@ def _operation_report_table(source: str) -> None:
                 tracked["started_at"],
                 [link["id"] for link in tracked["links"]],
             )
-            by_id = {report.get("_id"): report for report in recent}
+            catalogs = fetch_listing_updates(
+                tracked["account_id"],
+                window,
+                channel=DELIVEROO_RETAIL_CHANNEL,
+                operation_type=CATALOG_PUBLISH_OPERATION_TYPE,
+            )
+            listing_by_id = {report.get("_id"): report for report in recent}
             for report in published:
-                by_id[report.get("_id")] = report
-            reports = list(by_id.values())
+                listing_by_id[report.get("_id")] = report
+            listing_reports = list(listing_by_id.values())
+            reports = listing_reports + [
+                report for report in catalogs if report.get("_id") not in listing_by_id
+            ]
             context = _listing_context(tracked["account_id"], reports, tracked["links"])
-            rows = combined_listing_rows(tracked["links"], reports, context)
+            rows = combined_listing_rows(tracked["links"], listing_reports, context)
+            catalog_rows = operation_report_rows(catalogs, context)
+            waiting_rows = [row for row in rows if row["Status"] == "Waiting" and not row.get("Report ID")]
+            finished_rows = [row for row in rows if row not in waiting_rows] + catalog_rows
+            finished_rows.sort(key=lambda row: row.get("Created") or "", reverse=True)
+            rows = waiting_rows + finished_rows
     except Exception as exc:
         st.error(str(exc))
         return
@@ -640,12 +663,13 @@ def _operation_report_table(source: str) -> None:
     elif waiting or running:
         note.caption(
             f"Checking operation reports every 10 seconds. "
-            f"Also showing Deliveroo Retail listing updates from the last {LISTING_POLL_HOURS} hours."
+            f"Also showing Deliveroo Retail listing updates and catalog pushes "
+            f"from the last {LISTING_POLL_HOURS} hours."
         )
     else:
         note.caption(
             f"Listing updates finished. Still checking every 10 seconds, "
-            f"including the last {LISTING_POLL_HOURS} hours."
+            f"including listing updates and catalog pushes from the last {LISTING_POLL_HOURS} hours."
         )
     refresh.button("Refresh", key=f"refresh_{source}")
     table = pd.DataFrame(rows)
